@@ -67,6 +67,7 @@ configs:
               proxy_pass http://web2/;
               proxy_set_header Host $$host;
               proxy_set_header X-Real-IP $$remote_addr;
+              proxy_set_header X-Test test-value;
               add_header X-Upstream $$upstream_addr always;
           }
       }
