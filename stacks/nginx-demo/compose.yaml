@@ -1,0 +1,72 @@
+# nginx-demo — test Stack Komodo: 1 reverse proxy + 2 backend, semua nginx.
+# Hanya service "proxy" yang mount config nginx (via compose `configs` inline,
+# supaya bisa dipakai di Stack mode UI tanpa file tambahan di server).
+#
+# Akses (lewat tunnel -L 8080:127.0.0.1:8080):
+#   http://localhost:8080/        -> halaman index proxy
+#   http://localhost:8080/app1/   -> web1
+#   http://localhost:8080/app2/   -> web2
+#   http://localhost:8080/health  -> "ok"
+
+services:
+  proxy:
+    image: nginx:alpine
+    restart: unless-stopped
+    depends_on:
+      - web1
+      - web2
+    ports:
+      - "127.0.0.1:8080:80"
+    configs:
+      - source: proxy_conf
+        target: /etc/nginx/conf.d/default.conf
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+
+  web1:
+    image: nginx:alpine
+    restart: unless-stopped
+
+  web2:
+    image: nginx:alpine
+    restart: unless-stopped
+
+configs:
+  proxy_conf:
+    content: |
+      upstream web1 { server web1:80; }
+      upstream web2 { server web2:80; }
+
+      server {
+          listen 80;
+          server_name _;
+
+          add_header X-Served-By $$hostname always;
+
+          location = / {
+              default_type text/plain;
+              return 200 "nginx-demo proxy\n/app1/ -> web1\n/app2/ -> web2\n";
+          }
+
+          location = /health {
+              default_type text/plain;
+              return 200 "ok\n";
+          }
+
+          location /app1/ {
+              proxy_pass http://web1/;
+              proxy_set_header Host $$host;
+              proxy_set_header X-Real-IP $$remote_addr;
+              add_header X-Upstream $$upstream_addr always;
+          }
+
+          location /app2/ {
+              proxy_pass http://web2/;
+              proxy_set_header Host $$host;
+              proxy_set_header X-Real-IP $$remote_addr;
+              add_header X-Upstream $$upstream_addr always;
+          }
+      }
